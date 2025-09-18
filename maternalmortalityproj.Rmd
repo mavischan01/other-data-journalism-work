@@ -1,0 +1,206 @@
+---
+title: "Final Project"
+output:
+  html_document:
+    df_print: paged
+---
+
+load libraries:
+
+```{r}
+library("tidyverse")
+library("lubridate")
+library("janitor")
+library("forcats")
+library("rvest")
+library("ggplot2")
+```
+
+Scrape for doula reimbursement data:
+
+```{r}
+newurl <- "https://nashp.org/state-medicaid-approaches-to-doula-service-benefits/"
+
+newhtml <- read_html(newurl)
+
+doula <- newhtml %>% html_element("table") %>% html_table(header = TRUE) %>% clean_names()
+
+doulanew <- doula %>% mutate(effectiveyear = case_when(
+  grepl(2014, federal_medicaid_authority) ~ 2014,
+  grepl(2017, federal_medicaid_authority) ~ 2017,
+  grepl(2021, federal_medicaid_authority) ~ 2021,
+  grepl(2022, federal_medicaid_authority) ~ 2022,
+  grepl(2023, federal_medicaid_authority) ~ 2023,
+  ))
+```
+
+load maternal mortality rate data:
+
+```{r}
+mmr2018 <- read_tsv("data/mmr2018.txt")
+
+notes <- mmr2018 %>% select(Notes) %>% filter(!is.na(Notes))
+write_csv(notes, "data/mmr2018notes")
+
+mmr2018 <- mmr2018 %>% filter(!is.na(Deaths)) %>% clean_names()
+
+mmr2019 <- read_tsv("data/mmr2019.txt")
+
+notes2019 <- mmr2019 %>% select(Notes) %>% filter(!is.na(Notes))
+write_csv(notes2019, "data/mmr2019notes")
+mmr2019 <- mmr2019 %>% filter(!is.na(Deaths)) %>% clean_names()
+
+mmr2020 <- read_tsv("data/mmr2020a.txt")
+notes2020 <- mmr2020 %>% select(Notes) %>% filter(!is.na(Notes))
+write_csv(notes2020, "data/mmr2020notes")
+mmr2020 <- mmr2020 %>% filter(!is.na(Deaths)) %>% clean_names()
+
+mmr2021 <- read_tsv("data/mmr2021.txt")
+notes2021 <- mmr2021 %>% select(Notes) %>% filter(!is.na(Notes))
+write_csv(notes2021, "data/mmr2021notes")
+mmr2021 <- mmr2021 %>% filter(!is.na(Deaths)) %>% clean_names()
+```
+
+data cleaning:
+
+```{r}
+mmr2018 %>% count(state)
+#only 28 states are included, one null value denotes total.
+mmr2018 %>% filter(is.na(deaths) | is.na(population))
+#there are no null values in deaths or population
+mmr2018 <- mmr2018 %>% mutate(newrate = deaths/population*100000)
+#crude rate sees notes/methodology
+
+mmr2019 %>% count(state)
+#only 30 states are included, one null value denotes total.
+mmr2019 %>% filter(is.na(deaths) | is.na(population))
+#there are no null values in deaths or population
+mmr2019 <- mmr2019 %>% mutate(newrate = deaths/population*100000)
+
+mmr2020 %>% count(state)
+#only 33 states are included, one null value denotes total
+mmr2020 %>% filter(is.na(deaths) | is.na(population))
+#there are no null values in deaths or population
+mmr2020 <- mmr2020 %>% mutate(newrate = deaths/population*100000)
+
+mmr2021 %>% count(state)
+#only 36 states are included, one null value denotes total
+mmr2021 %>% filter(is.na(deaths) | is.na(population))
+#there are no null values in deaths or population
+mmr2021 <- mmr2021 %>% mutate(newrate = deaths/population*100000)
+
+#joining:
+new18 <- mmr2018 %>% filter(!is.na(state))
+new19 <- mmr2019 %>% filter(!is.na(state))
+new20 <- mmr2020 %>% filter(!is.na(state))
+new21 <- mmr2021 %>% filter(!is.na(state))
+
+new1819 <- full_join(new18, new19, by="state")
+new181920 <- full_join(new1819, new20, by="state")
+newfull <- full_join(new181920, new21, by="state")
+
+doulafull <- full_join(doulanew, newfull, by="state")
+```
+
+1.  What states are missing data for one or more year(s)?
+
+```{r}
+newfull %>% filter(is.na(deaths.x) | is.na(deaths.y) | is.na(deaths.y.y) | is.na(deaths.x.x)) %>% count(state)
+notes %>% filter(grepl("suppressed", Notes, ignore.case=T))
+doulafull %>% filter(is.na(deaths.x) | is.na(deaths.y) | is.na(deaths.y.y) | is.na(deaths.x.x)) %>% count(state)
+```
+
+A total of 11 states are missing one or more years of data because of CDC confidentiality constraints. Rhode Island and D.C. are not included in the CDC dataset because the center did not collect maternal mortality data from those places. Of the 11 states with partial data, West Virginia, Connecticut and Iowa are missing three years of data.
+
+2.  Which state has the highest maternal mortality rate on average?
+
+```{r}
+forq4 <- newfull %>% group_by(state) %>% summarize(sum = sum(newrate.x, newrate.y, newrate.x.x, newrate.y.y)) %>% mutate(avg = sum/4) %>% arrange(desc(avg))
+```
+
+Mississippi has the highest average maternal mortality rate between 2018 and 2021, at 0.76 deaths per 100000 population.
+
+3.  How did Missouri's maternal mortality rate change during the time period?
+
+```{r}
+#load data:
+mo2018a <- read_tsv("data/mo2018.txt")
+mo2018a <- mo2018a %>% filter(!is.na(State)) %>% clean_names() %>% mutate(year = 2018) %>% mutate(newrate = deaths/population*100000)
+mo2019 <- read_tsv("data/mo2019.txt")
+mo2019 <- mo2019 %>% filter(!is.na(State)) %>% clean_names() %>% mutate(year = 2019) %>% mutate(newrate = deaths/population*100000)
+mo2020 <- read_tsv("data/mo2020.txt")
+mo2020 <- mo2020 %>% filter(!is.na(State)) %>% clean_names() %>% mutate(year = 2020) %>% mutate(newrate = deaths/population*100000)
+mo2021 <- read_tsv("data/mo2021a.txt")
+mo2021 <- mo2021 %>% filter(!is.na(State)) %>% clean_names() %>% mutate(year = 2021) %>% mutate(newrate = deaths/population*100000)
+
+#bar chart:
+bar2018 <- mo2018a %>% select(newrate, year)
+bar2019 <- mo2019 %>% select(newrate, year)
+bar2020 <- mo2020 %>% select(newrate, year)
+bar2021 <- mo2021 %>% select(newrate, year)
+#join by year
+bar1819 <- full_join(bar2018, bar2019, by=c("year" = "year", "newrate" = "newrate"))
+bar181920 <- full_join(bar1819, bar2020, by=c("year" = "year", "newrate" = "newrate"))
+barfull <- full_join(bar181920, bar2021, by=c("year" = "year", "newrate" = "newrate"))
+
+barfull %>% ggplot(aes(x=year, y=newrate)) +
+  geom_col(color="grey", fill="white") +
+  theme_classic()
+```
+
+A significant increase in rate is seen in 2020, which was sustained in 2021.
+
+4.  For the latest states that are reimbursing doulas, how did their average maternal mortality rates compare with other states between 2019 and 2021?
+
+```{r}
+q3 <- doulafull %>% filter(!is.na(effectiveyear))
+q3 <- q3 %>% arrange(desc(effectiveyear))
+q3a <- q3 %>% filter(grepl(2022, effectiveyear) | grepl(2023, effectiveyear))
+#six states began reimbursing doulas after 2021.
+
+q3ab <- q3a %>% select(state, effectiveyear)
+q4joined <- right_join(q3ab, forq4, by="state")
+q4joined %>% filter(!is.na(avg)) %>% summarize(mean = mean(avg))
+#the mean average rate is 0.46
+q4joined %>% arrange(desc(avg))
+```
+
+The six states that have most recently reimbursed doulas all have an average maternal mortality rate at or below the mean average rate of the states surveyed here.
+
+5.  For states that have most recently reimbursed doulas, are their maternal mortality rates going up or down beforehand?
+
+```{r}
+q3 <- doulafull %>% filter(!is.na(effectiveyear))
+q3 <- q3 %>% arrange(desc(effectiveyear))
+q3a <- q3 %>% filter(grepl(2022, effectiveyear) | grepl(2023, effectiveyear))
+#six states began reimbursing doulas after 2021.
+
+q518 <- new18 %>% filter(state=="California" | state=="Michigan" | state=="Maryland" | state=="Nevada" | state=="Virginia" | state=="Washington, DC") %>% mutate(year = "2018") %>% select(state, year, newrate)
+
+q519 <- new19 %>% filter(state=="California" | state=="Michigan" | state=="Maryland" | state=="Nevada" | state=="Virginia" | state=="Washington, DC") %>% mutate(year = "2019") %>% select(state, year, newrate)
+
+q520 <- new20 %>% filter(state=="California" | state=="Michigan" | state=="Maryland" | state=="Nevada" | state=="Virginia" | state=="Washington, DC") %>% mutate(year = "2020") %>% select(state, year, newrate)
+#nevada included
+
+q521 <- new21 %>% filter(state=="California" | state=="Michigan" | state=="Maryland" | state=="Nevada" | state=="Virginia" | state=="Washington, DC") %>% mutate(year = "2021") %>% select(state, year, newrate)
+#include nevada
+
+join1819 <- full_join(q518, q519, by=c("year" = "year", "newrate" = "newrate", "state" = "state"))
+joined181920 <- full_join(join1819, q520, by=c("year" = "year", "newrate" = "newrate", "state" = "state"))
+q5joined <- full_join(joined181920, q521, by=c("year" = "year", "newrate" = "newrate", "state" = "state"))
+
+
+q5joined %>% 
+  ggplot(aes(x=state, y=newrate, fill=year)) +
+  geom_col(position="dodge")
+```
+
+California's maternal mortality rates have been holding steady, while Virginia has been seeing continued increase. Maryland and Michigan's rates have been fluctuating within a small range of values.
+
+Summary: States that have most recently started reimbursing doulas (those after 2021) have on average have lower than average maternal mortality rates compared with others. There does not seem to be a strong correlation between trends of maternal mortality rate and states' decisions to reimburse doulas, even though the big selling point of doulas is that they can help decrease maternal mortality.
+
+Maternal mortality here refers to definitions according to the International Statistical Classification of Diseases and Related Health Problems 10th Revision, namely A34 and the "O" series (for more detail, see there: <https://icd.who.int/browse10/2010/en>. Data is downloaded from CDC Wonder Multiple Cause of Death by Single Race 2018-2021.
+
+The number of deaths recorded here include those of all ages, races, genders and all socioeconomic regions (urban and rural). When calculating the death rates of each state in each year, the corresponding number of deaths was divided by the corresponding number of population then mutiplied by 100,000. In this analysis, states are compared against one another and temporal trends within and among states are also compared, so as to better look at differences across space and time.
+
+Available data is incomplete, since incidents of maternal mortality are small in number, many states are not included in the CDC Wonder database because their case numbers were small enough to fall under the center's confidentiality requirement. Reimbursing doulas is also a recent enough trend that comparison between pre and post comparisons are hard to do.
