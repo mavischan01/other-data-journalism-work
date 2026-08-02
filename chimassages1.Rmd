@@ -1,0 +1,125 @@
+---
+title: "chi massage 2020-now vs 2015-2019"
+output: html_notebook
+---
+
+load libraries:
+```{r}
+library("tidyverse")
+library("lubridate")
+library("janitor")
+library("forcats")
+library("rvest")
+library("ggplot2")
+library("readr")
+```
+
+load datasets:
+```{r}
+chibiz2 <- read_csv("chibiz1.csv")
+print(chibiz2)
+chibizold <- read_csv("chibizold.csv")
+print(chibizold)
+```
+
+data cleaning:
+```{r}
+chibiz2 <- chibiz2 %>% clean_names() #standardize column names
+chibiz2 %>% filter(duplicated(.)) #check duplicate values
+chibiz2 <- chibiz2 %>% distinct() #remove duplicate values
+chibiz2 <- chibiz2 %>% mutate(date_issued_new = mdy(date_issued)) #change into date column based on date format presented in dataset
+chibiz21 <- chibiz2 %>% select(legal_name, doing_business_as_name, ward, business_activity_id, business_activity, license_number, license_code, application_type, date_issued_new, license_term_expiration_date, license_status, latitude, longitude)
+chibiz21 %>% filter(is.na(license_status)) #check for null in specific column
+chibizfull <- chibiz21 %>% filter(!is.na(business_activity_id)) 
+chibizna <- chibiz21 %>% filter(is.na(business_activity_id))
+```
+
+Finding massage parlor licenses:
+```{r}
+chimassage <- chibizfull %>% filter(grepl("745", business_activity_id))
+chimassage %>% select(date_issued_new)
+chimassage <- chimassage %>% separate(date_issued_new, into = c("issued_year", "issued_month", "issued_day"), sep = "-")
+chi11massage <- chimassage %>% filter(ward == "11")
+chi11massage %>% filter(duplicated(license_number))
+chi11massage <- chi11massage %>% mutate(license_term_expiration_date = mdy(license_term_expiration_date))
+chi11massage <- chi11massage %>% separate(license_term_expiration_date, into = c("expire_year", "expire_month", "expire_day"), sep = "-")
+chi11massage
+```
+From 2020 to now, Chicago has issued/renewed 66 licenses for businesses providing full body massage services in 11th ward. 
+
+Licenses for massage businesses by year:
+```{r}
+chi11massage %>% filter(issued_year == "2020")
+chi11massage %>% group_by(issued_year) %>% count(application_type)
+massagetrendnew <- chi11massage %>% group_by(issued_year) %>% count(application_type)
+```
+
+check from null table:
+```{r}
+chibizna %>% filter(ward == "11") %>% group_by(license_code) %>% count()
+```
+No massage businesses in this dataset. 
+
+currently active massage biz in 11th ward:
+```{r}
+chi11massage$expire_year <- as.numeric(chi11massage$expire_year)
+chi11massage$expire_month <- as.numeric(chi11massage$expire_month)
+chi11massage %>% filter(expire_year > 2025)
+chi11massage26on <- chi11massage %>% filter(expire_year > 2025)
+chi11massage26on %>% group_by(expire_year) %>% count(expire_month)
+```
+At the end of August 2026, there are going to be 18 currently active licenses for businesses providing full body massage services in the 11th ward. 
+
+export for viz:
+```{r}
+chi11massage26on$expire_date <- as.Date(with(chi11massagenow, paste(expire_year, expire_month, expire_day,sep="-")), "%Y-%m-%d")
+chi11massage26on %>% filter(expire_date > "2026-8-31")
+chi11massagecurrent <- chi11massage26on %>% filter(expire_date > "2026-8-31")
+chi11massagecurrent %>% filter(!duplicated(license_number))
+chi11massagecurrent <- chi11massagecurrent %>% filter(!duplicated(license_number))
+write_csv(chi11massagecurrent, "currentchi11massage.csv")
+```
+
+
+
+
+
+chibizold cleaning:
+```{r}
+chibizold <- chibizold %>% clean_names()
+chibizold %>% group_by(ward) %>% count()
+chibizold %>% filter(duplicated(.)) #check duplicate values
+chi11bizold <- chibizold %>% distinct() #remove duplicate values
+chi11bizold <- chi11bizold %>% mutate(date_issued_new = mdy(date_issued)) #change into date column based on date format presented in dataset
+chi11bizold <- chi11bizold %>% separate(date_issued_new, into = c("issued_year", "issued_month", "issued_day"), sep = "-")
+chi11bizold %>% group_by(issued_year) %>% count()
+chi11bizoldfull <- chi11bizold %>% filter(!is.na(business_activity_id)) 
+chi11bizoldna <- chi11bizold %>% filter(is.na(business_activity_id))
+```
+
+finding massage biz in old dataset:
+```{r}
+chi11bizoldfull %>% filter(grepl("745", business_activity_id)) 
+chi11bizoldfull %>% filter(grepl("745", business_activity_id)) %>% group_by(application_type) %>% count(issued_year)
+chi11bizoldna %>% group_by(license_code) %>% count()
+chi11bizoldna %>% filter(license_code == "4404")
+chi11bizold %>% filter(license_number == "2563893" | grepl("745", business_activity_id))
+chi11massageold <- chi11bizold %>% filter(license_number == "2563893" | grepl("745", business_activity_id))
+```
+From 2015 to 2019, Chicago issued/renewed 76 licenses to businesses providing full body massage services in the 11th ward. 
+
+licenses for massage businesses by year in old dataset:
+```{r}
+chi11massageold %>% group_by(issued_year) %>% count(application_type)
+massagetrendold <- chi11massageold %>% group_by(issued_year) %>% count(application_type)
+```
+
+export for viz:
+```{r}
+write_csv(massagetrendold, "massagetrendold.csv")
+write_csv(massagetrendnew, "massagetrendnew.csv")
+```
+
+
+
+
